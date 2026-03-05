@@ -1,0 +1,9 @@
+{
+    "display_name": "Impersonation",
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Komakun",
+    "version": "1.0.0",
+    "description": "Generate user-style continuations for roleplay, one sentence at a time",
+    "loading_order": 1
+}

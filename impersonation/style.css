@@ -1,0 +1,65 @@
+/* Impersonation Extension - Wand Button Styles */
+
+#impersonation-wand {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    margin-right: 4px;
+    opacity: 0.7;
+}
+
+#impersonation-wand:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+}
+
+#impersonation-wand:active {
+    transform: scale(0.95);
+}
+
+#impersonation-wand.loading {
+    opacity: 0.5;
+    cursor: wait;
+    animation: pulse 1s infinite;
+}
+
+#impersonation-wand.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.5;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Loading spinner overlay */
+#impersonation-wand.loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
