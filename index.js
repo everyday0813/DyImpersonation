@@ -60,15 +60,30 @@ function getRecentChatHistory() {
     }).join("\n\n");
 }
 
+function getCharacterName() {
+    const ctx = getContext();
+    if (ctx.characters && ctx.characterId !== undefined && ctx.characters[ctx.characterId]) {
+        return ctx.characters[ctx.characterId].name || "the character";
+    }
+    return "the character";
+}
+
 function buildPrompt(input, persona, history) {
     const s = getSettings();
-    let p = "Continue as USER. One sentence only.\n\nPersona:\n" + persona + "\n\nChat:\n" + history + "\n";
+    const charName = getCharacterName();
+    let p = "You are writing the HUMAN PLAYER's response in a roleplay chat.\n";
+    p += "DO NOT write as " + charName + " (the AI character).\n";
+    p += "Write ONLY as the human player.\n\n";
+    p += "Human Player Persona:\n" + persona + "\n\n";
+    p += "Recent Chat (" + charName + " is AI, User is human):\n" + history + "\n";
+    
     if (input && input.trim()) {
-        p += "\nPartial: \"" + input + "\"\nContinue this naturally.";
+        p += "\nHuman's partial input: \"" + input + "\"\n";
+        p += "Continue this as the human player would say it.";
     } else {
-        p += "\nWrite user's next action.";
+        p += "\nWrite the human player's next response.";
     }
-    p += "\n\nRules:\n- Max " + s.maxChars + " chars\n- Dialogue in quotes\n- Brief only";
+    p += "\n\nRules:\n- Max " + s.maxChars + " chars\n- Dialogue in quotes\n- Brief only\n- Write as the HUMAN, not " + charName;
     return p;
 }
 
