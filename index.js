@@ -57,11 +57,8 @@ function getUserPersona() {
         persona = context.extensionSettings.persona;
     }
     
-    if (!persona) {
-        const userAvatar = context.userAvatar;
-        if (userAvatar && userAvatar.description) {
-            persona = userAvatar.description;
-        }
+    if (!persona && context.userAvatar && context.userAvatar.description) {
+        persona = context.userAvatar.description;
     }
     
     return persona || "A roleplay participant";
@@ -83,20 +80,15 @@ function getRecentChatHistory() {
 function detectUnclosedQuote(text) {
     if (!text) return { hasUnclosedQuote: false, quoteChar: null };
     const quoteChars = ['"', '"', '"', "'", "'", "'"];
-    const result = { hasUnclosedQuote: false, quoteChar: null, lastQuoteIndex: -1 };
-    
     for (let i = 0; i < quoteChars.length; i++) {
         const char = quoteChars[i];
         const escaped = char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const count = (text.match(new RegExp(escaped, "g")) || []).length;
         if (count % 2 !== 0) {
-            result.hasUnclosedQuote = true;
-            result.quoteChar = char;
-            result.lastQuoteIndex = text.lastIndexOf(char);
-            break;
+            return { hasUnclosedQuote: true, quoteChar: char, lastQuoteIndex: text.lastIndexOf(char) };
         }
     }
-    return result;
+    return { hasUnclosedQuote: false, quoteChar: null };
 }
 
 function buildContinuationPrompt(currentInput, persona, chatHistory) {
@@ -106,7 +98,7 @@ function buildContinuationPrompt(currentInput, persona, chatHistory) {
     let prompt = "You are continuing a roleplay as the USER character. Write the NEXT sentence only.\n\nUSER PERSONA:\n" + persona + "\n\nRECENT CONVERSATION:\n" + chatHistory + "\n";
     
     if (currentInput && currentInput.trim()) {
-        prompt += "\nUSER'S PARTIAL INPUT:\n\"" + currentInput + "\"\n";
+        prompt += "\nUSER'S PARTIAL INPUT:\n\"" + currentInput + ""\n";
         if (quoteInfo.hasUnclosedQuote) {
             prompt += "\nIMPORTANT: Continue the dialogue naturally and close the quote when appropriate.\n";
         } else {
