@@ -275,13 +275,33 @@ async function callCustomAPI(prompt) {
     
     const data = await response.json();
     
+    // Debug: log response structure
+    console.log("[Impersonation] API Response:", JSON.stringify(data, null, 2));
+    
     // OpenAI-compatible response format
     if (data.choices && data.choices[0]?.message?.content) {
         return data.choices[0].message.content;
     }
     
-    throw new Error("Unexpected API response format");
-}
+    // Try alternative formats
+    if (data.choices && data.choices[0]?.text) {
+        return data.choices[0].text;
+    }
+    
+    if (data.response) {
+        return data.response;
+    }
+    
+    if (data.content) {
+        return data.content;
+    }
+    
+    if (data.message) {
+        return data.message;
+    }
+    
+    console.error("[Impersonation] Full response:", data);
+    throw new Error("Unexpected API response format. Check console for details.");
 
 // ============================================
 // UI Components
