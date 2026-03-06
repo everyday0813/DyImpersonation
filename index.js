@@ -84,7 +84,7 @@ async function callAPI(prompt) {
             model: s.apiModel,
             messages: [{ role: "user", content: prompt }],
             temperature: 0.8,
-            max_tokens: 500,
+            max_tokens: 2000,
             stream: false
         })
     });
@@ -94,12 +94,18 @@ async function callAPI(prompt) {
     console.log("[Impersonation] message:", d.choices?.[0]?.message);
     
     // Check for reasoning model format (e.g., DeepSeek-R1, GLM-5 thinking)
-    // These models return reasoning_content instead of content when thinking
     if (d.choices && d.choices[0] && d.choices[0].message) {
         const msg = d.choices[0].message;
-        // Prefer content, fallback to reasoning_content for thinking models
-        const content = msg.content || msg.reasoning_content;
-        if (content) return content;
+        // If content exists, use it
+        if (msg.content) return msg.content;
+        // If only reasoning_content exists, model didn't produce final answer
+        // (thinking model ran out of tokens before completing)
+        if (msg.reasoning_content) {
+            console.warn("[Impersonation] Thinking model returned only reasoning, no final content.");
+            console.warn("[Impersonation] Increase max_tokens or use non-thinking model.");
+            toastr.warning("Thinking model needs more tokens. Increase max_tokens or use glm-4 instead.", "Impersonation");
+            return null;
+        }
     }
     // Legacy formats
     if (d.choices && d.choices[0] && d.choices[0].text) return d.choices[0].text;
