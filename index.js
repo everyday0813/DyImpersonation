@@ -91,10 +91,21 @@ async function callAPI(prompt) {
     if (!res.ok) throw new Error("API " + res.status + ": " + await res.text());
     const d = await res.json();
     console.log("[Impersonation] Response:", d);
-    if (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) return d.choices[0].message.content;
+    console.log("[Impersonation] message:", d.choices?.[0]?.message);
+    
+    // Check for reasoning model format (e.g., DeepSeek-R1, GLM-5 thinking)
+    // These models return reasoning_content instead of content when thinking
+    if (d.choices && d.choices[0] && d.choices[0].message) {
+        const msg = d.choices[0].message;
+        // Prefer content, fallback to reasoning_content for thinking models
+        const content = msg.content || msg.reasoning_content;
+        if (content) return content;
+    }
+    // Legacy formats
     if (d.choices && d.choices[0] && d.choices[0].text) return d.choices[0].text;
     if (d.response) return d.response;
     if (d.content) return d.content;
+    console.error("[Impersonation] No content found. Full response:", JSON.stringify(d, null, 2));
     throw new Error("Bad response format");
 }
 
