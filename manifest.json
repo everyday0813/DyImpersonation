@@ -3,7 +3,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Komakun",
-    "version": "1.3.5",
+    "version": "1.4.0",
     "description": "Generate user-style continuations for roleplay with custom API support",
     "loading_order": 1,
     "update_url": "https://github.com/everyday0813/DyImpersonation"

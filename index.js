@@ -1,6 +1,4 @@
 // Impersonation Extension - Main Logic
-// Generates user-style continuations for roleplay
-
 import { getContext, extension_settings } from "../../../extensions.js";
 import { saveSettingsDebounced } from "../../../../script.js";
 
@@ -26,244 +24,158 @@ function getSettings() {
 }
 
 async function loadSettings() {
-    const settings = getSettings();
-    $("#impersonation-enabled").prop("checked", settings.enabled);
-    $("#impersonation-api-endpoint").val(settings.apiEndpoint);
-    $("#impersonation-api-key").val(settings.apiKey);
-    $("#impersonation-api-model").val(settings.apiModel);
-    $("#impersonation-max-chars").val(settings.maxChars);
+    const s = getSettings();
+    $("#impersonation-enabled").prop("checked", s.enabled);
+    $("#impersonation-api-endpoint").val(s.apiEndpoint);
+    $("#impersonation-api-key").val(s.apiKey);
+    $("#impersonation-api-model").val(s.apiModel);
+    $("#impersonation-max-chars").val(s.maxChars);
 }
 
 function saveSettings() {
-    const settings = getSettings();
-    settings.enabled = $("#impersonation-enabled").prop("checked");
-    settings.apiEndpoint = $("#impersonation-api-endpoint").val();
-    settings.apiKey = $("#impersonation-api-key").val();
-    settings.apiModel = $("#impersonation-api-model").val();
-    settings.maxChars = parseInt($("#impersonation-max-chars").val()) || 150;
+    const s = getSettings();
+    s.enabled = $("#impersonation-enabled").prop("checked");
+    s.apiEndpoint = $("#impersonation-api-endpoint").val();
+    s.apiKey = $("#impersonation-api-key").val();
+    s.apiModel = $("#impersonation-api-model").val();
+    s.maxChars = parseInt($("#impersonation-max-chars").val()) || 150;
     saveSettingsDebounced();
-    console.log("[Impersonation] Settings saved");
 }
 
 function getUserPersona() {
-    const context = getContext();
-    let persona = null;
-    
-    if (context.chatMetadata && context.chatMetadata.persona) {
-        persona = context.chatMetadata.persona;
-    }
-    
-    if (!persona && context.extensionSettings && context.extensionSettings.persona) {
-        persona = context.extensionSettings.persona;
-    }
-    
-    if (!persona && context.userAvatar && context.userAvatar.description) {
-        persona = context.userAvatar.description;
-    }
-    
-    return persona || "A roleplay participant";
+    const ctx = getContext();
+    let p = null;
+    if (ctx.chatMetadata && ctx.chatMetadata.persona) p = ctx.chatMetadata.persona;
+    if (!p && ctx.extensionSettings && ctx.extensionSettings.persona) p = ctx.extensionSettings.persona;
+    if (!p && ctx.userAvatar && ctx.userAvatar.description) p = ctx.userAvatar.description;
+    return p || "A roleplay participant";
 }
 
 function getRecentChatHistory() {
-    const context = getContext();
-    const settings = getSettings();
-    const chat = context.chat || [];
-    const recentMessages = chat.slice(-settings.contextMessages);
-    
-    return recentMessages.map(function(msg) {
-        const name = msg.is_user ? "User" : (msg.name || "Character");
-        const text = msg.mes || "";
-        return name + ": " + text;
+    const ctx = getContext();
+    const s = getSettings();
+    const chat = ctx.chat || [];
+    return chat.slice(-s.contextMessages).map(function(m) {
+        return (m.is_user ? "User" : (m.name || "Char")) + ": " + (m.mes || "");
     }).join("\n\n");
 }
 
-function detectUnclosedQuote(text) {
-    if (!text) return { hasUnclosedQuote: false, quoteChar: null };
-    const quoteChars = ['"', '"', '"', "'", "'", "'"];
-    for (let i = 0; i < quoteChars.length; i++) {
-        const char = quoteChars[i];
-        const escaped = char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const count = (text.match(new RegExp(escaped, "g")) || []).length;
-        if (count % 2 !== 0) {
-            return { hasUnclosedQuote: true, quoteChar: char, lastQuoteIndex: text.lastIndexOf(char) };
-        }
-    }
-    return { hasUnclosedQuote: false, quoteChar: null };
-}
-
-function buildContinuationPrompt(currentInput, persona, chatHistory) {
-    const settings = getSettings();
-    const quoteInfo = detectUnclosedQuote(currentInput);
-    
-    let prompt = "You are continuing a roleplay as the USER character. Write the NEXT sentence only.\n\nUSER PERSONA:\n" + persona + "\n\nRECENT CONVERSATION:\n" + chatHistory + "\n";
-    
-    if (currentInput && currentInput.trim()) {
-        prompt += "\nUSER'S PARTIAL INPUT:\n\"" + currentInput + ""\n";
-        if (quoteInfo.hasUnclosedQuote) {
-            prompt += "\nIMPORTANT: Continue the dialogue naturally and close the quote when appropriate.\n";
-        } else {
-            prompt += "\nContinue naturally from this input.\n";
-        }
+function buildPrompt(input, persona, history) {
+    const s = getSettings();
+    let p = "Continue as USER. One sentence only.\n\nPersona:\n" + persona + "\n\nChat:\n" + history + "\n";
+    if (input && input.trim()) {
+        p += "\nPartial: \"" + input + "\"\nContinue this naturally.";
     } else {
-        prompt += "\nContinue the roleplay as the user.\n";
+        p += "\nWrite user's next action.";
     }
-    
-    prompt += "\nOUTPUT RULES:\n- Output ONLY the continuation text\n- Max " + settings.maxChars + " characters\n- Dialogue inside quotes\n- Natural, brief continuation\n";
-    
-    return prompt;
+    p += "\n\nRules:\n- Max " + s.maxChars + " chars\n- Dialogue in quotes\n- Brief only";
+    return p;
 }
 
-async function callCustomAPI(prompt) {
-    const settings = getSettings();
-    
-    const response = await fetch(settings.apiEndpoint, {
+async function callAPI(prompt) {
+    const s = getSettings();
+    const res = await fetch(s.apiEndpoint, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + settings.apiKey
+            "Authorization": "Bearer " + s.apiKey
         },
         body: JSON.stringify({
-            model: settings.apiModel,
-            messages: [
-                { role: "user", content: prompt }
-            ],
+            model: s.apiModel,
+            messages: [{ role: "user", content: prompt }],
             temperature: 0.8,
             max_tokens: 500,
             stream: false
         })
     });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error("API error " + response.status + ": " + errorText);
-    }
-    
-    const data = await response.json();
-    console.log("[Impersonation] API Response:", data);
-    
-    if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-        return data.choices[0].message.content;
-    }
-    if (data.choices && data.choices[0] && data.choices[0].text) {
-        return data.choices[0].text;
-    }
-    if (data.response) {
-        return data.response;
-    }
-    if (data.content) {
-        return data.content;
-    }
-    
-    throw new Error("Unexpected API response format");
+    if (!res.ok) throw new Error("API " + res.status + ": " + await res.text());
+    const d = await res.json();
+    console.log("[Impersonation] Response:", d);
+    if (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) return d.choices[0].message.content;
+    if (d.choices && d.choices[0] && d.choices[0].text) return d.choices[0].text;
+    if (d.response) return d.response;
+    if (d.content) return d.content;
+    throw new Error("Bad response format");
 }
 
-async function generateContinuation() {
-    const settings = getSettings();
+async function generate() {
+    const s = getSettings();
+    if (!s.enabled) return null;
+    if (!s.apiKey) { toastr.warning("Set API key first", "Impersonation"); return null; }
     
-    if (!settings.enabled) {
-        console.log("[Impersonation] Extension disabled");
-        return null;
-    }
-    
-    if (!settings.apiKey) {
-        toastr.warning("Please configure API key in settings", "Impersonation");
-        return null;
-    }
-    
-    const persona = getUserPersona();
-    const chatHistory = getRecentChatHistory();
-    const currentInput = $("#send_textarea").val() || "";
-    const prompt = buildContinuationPrompt(currentInput, persona, chatHistory);
-    
+    const prompt = buildPrompt($("#send_textarea").val() || "", getUserPersona(), getRecentChatHistory());
     console.log("[Impersonation] Generating...");
     
     try {
-        const result = await callCustomAPI(prompt);
-        let continuation = (result || "").trim();
-        
-        if (continuation.length > settings.maxChars) {
-            const cutPoint = continuation.lastIndexOf(".", settings.maxChars);
-            if (cutPoint > settings.maxChars / 2) {
-                continuation = continuation.substring(0, cutPoint + 1);
-            } else {
-                continuation = continuation.substring(0, settings.maxChars);
-            }
+        let r = (await callAPI(prompt) || "").trim();
+        if (r.length > s.maxChars) {
+            const i = r.lastIndexOf(".", s.maxChars);
+            r = r.substring(0, i > s.maxChars/2 ? i+1 : s.maxChars);
         }
-        
-        console.log("[Impersonation] Generated:", continuation);
-        return continuation;
-    } catch (error) {
-        console.error("[Impersonation] Error:", error);
-        toastr.error("Failed: " + error.message, "Impersonation");
+        console.log("[Impersonation] Done:", r);
+        return r;
+    } catch (e) {
+        console.error("[Impersonation] Error:", e);
+        toastr.error(e.message, "Impersonation");
         return null;
     }
 }
 
-function createWandButton() {
-    const button = $('<button id="impersonation-wand" title="Generate continuation">Wand</button>');
-    
-    button.on("click", async function(e) {
+function makeButton() {
+    const btn = $('<button id="impersonation-wand" title="Continue">W</button>');
+    btn.on("click", async function(e) {
         e.preventDefault();
         if (isGenerating) return;
         isGenerating = true;
-        button.addClass("loading");
-        
+        btn.addClass("loading");
         try {
-            const continuation = await generateContinuation();
-            if (continuation) {
-                const currentInput = $("#send_textarea").val() || "";
-                const separator = (currentInput && !currentInput.endsWith(" ")) ? " " : "";
-                $("#send_textarea").val(currentInput + separator + continuation);
+            const cont = await generate();
+            if (cont) {
+                const cur = $("#send_textarea").val() || "";
+                $("#send_textarea").val(cur + (cur && !cur.endsWith(" ") ? " " : "") + cont);
                 $("#send_textarea").trigger("input");
             }
         } finally {
             isGenerating = false;
-            button.removeClass("loading");
+            btn.removeClass("loading");
         }
     });
-    
-    return button;
+    return btn;
 }
 
-function injectWandButton() {
-    if ($("#impersonation-wand").length > 0) return;
-    const sendButton = $("#send_but");
-    if (sendButton.length === 0) {
-        console.error("[Impersonation] Send button not found");
-        return;
-    }
-    const wandButton = createWandButton();
-    wandButton.insertBefore(sendButton);
-    console.log("[Impersonation] Wand button injected");
+function injectButton() {
+    if ($("#impersonation-wand").length) return;
+    const sb = $("#send_but");
+    if (!sb.length) { console.error("[Impersonation] No send button"); return; }
+    makeButton().insertBefore(sb);
+    console.log("[Impersonation] Button ready");
 }
 
-function injectSettingsPanel() {
-    if ($("#impersonation-settings").length > 0) return;
-    
-    const settings = getSettings();
-    const html = '<div id="impersonation-settings" class="extension_container"><div class="inline-drawer-wide"><h3>Impersonation Settings</h3><label><input type="checkbox" id="impersonation-enabled"> Enable</label><label>API Endpoint:<br><input type="text" id="impersonation-api-endpoint" class="text_pole wide100p"></label><label>API Key:<br><input type="password" id="impersonation-api-key" class="text_pole wide100p"></label><label>Model:<br><input type="text" id="impersonation-api-model" class="text_pole wide100p"></label><label>Max Chars:<br><input type="number" id="impersonation-max-chars" class="text_pole" min="50" max="500"></label></div></div>';
-    
-    $("#extensions_settings").append(html);
-    
-    $("#impersonation-enabled").prop("checked", settings.enabled);
-    $("#impersonation-api-endpoint").val(settings.apiEndpoint);
-    $("#impersonation-api-key").val(settings.apiKey);
-    $("#impersonation-api-model").val(settings.apiModel);
-    $("#impersonation-max-chars").val(settings.maxChars);
-    
-    $("#impersonation-enabled").on("change", saveSettings);
-    $("#impersonation-api-endpoint").on("input", saveSettings);
-    $("#impersonation-api-key").on("input", saveSettings);
-    $("#impersonation-api-model").on("input", saveSettings);
-    $("#impersonation-max-chars").on("input", saveSettings);
-    
-    console.log("[Impersonation] Settings panel injected");
+function injectSettings() {
+    if ($("#impersonation-settings").length) return;
+    const s = getSettings();
+    $("#extensions_settings").append(
+        '<div id="impersonation-settings" class="extension_container"><div class="inline-drawer-wide">' +
+        '<h3>Impersonation</h3>' +
+        '<label><input type="checkbox" id="impersonation-enabled"> Enable</label>' +
+        '<label>Endpoint:<br><input type="text" id="impersonation-api-endpoint" class="text_pole wide100p"></label>' +
+        '<label>Key:<br><input type="password" id="impersonation-api-key" class="text_pole wide100p"></label>' +
+        '<label>Model:<br><input type="text" id="impersonation-api-model" class="text_pole wide100p"></label>' +
+        '<label>Max:<br><input type="number" id="impersonation-max-chars" class="text_pole" min="50" max="500"></label>' +
+        '</div></div>'
+    );
+    $("#impersonation-enabled").prop("checked", s.enabled).on("change", saveSettings);
+    $("#impersonation-api-endpoint").val(s.apiEndpoint).on("input", saveSettings);
+    $("#impersonation-api-key").val(s.apiKey).on("input", saveSettings);
+    $("#impersonation-api-model").val(s.apiModel).on("input", saveSettings);
+    $("#impersonation-max-chars").val(s.maxChars).on("input", saveSettings);
+    console.log("[Impersonation] Settings ready");
 }
 
 jQuery(async function() {
-    console.log("[Impersonation] Loading extension...");
+    console.log("[Impersonation] Loading...");
     await loadSettings();
-    injectWandButton();
-    injectSettingsPanel();
-    console.log("[Impersonation] Loaded successfully");
+    injectButton();
+    injectSettings();
+    console.log("[Impersonation] Ready");
 });
