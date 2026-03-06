@@ -49,17 +49,17 @@ function getUserPersona() {
     const context = getContext();
     let persona = null;
     
-    if (context.chatMetadata?.persona) {
+    if (context.chatMetadata && context.chatMetadata.persona) {
         persona = context.chatMetadata.persona;
     }
     
-    if (!persona && context.extensionSettings?.persona) {
+    if (!persona && context.extensionSettings && context.extensionSettings.persona) {
         persona = context.extensionSettings.persona;
     }
     
     if (!persona) {
         const userAvatar = context.userAvatar;
-        if (userAvatar?.description) {
+        if (userAvatar && userAvatar.description) {
             persona = userAvatar.description;
         }
     }
@@ -73,19 +73,20 @@ function getRecentChatHistory() {
     const chat = context.chat || [];
     const recentMessages = chat.slice(-settings.contextMessages);
     
-    return recentMessages.map(msg => {
+    return recentMessages.map(function(msg) {
         const name = msg.is_user ? "User" : (msg.name || "Character");
         const text = msg.mes || "";
-        return \`\${name}: \${text}\`;
+        return name + ": " + text;
     }).join("\n\n");
 }
 
 function detectUnclosedQuote(text) {
     if (!text) return { hasUnclosedQuote: false, quoteChar: null };
     const quoteChars = ['"', '"', '"', "'", "'", "'"];
-    let result = { hasUnclosedQuote: false, quoteChar: null, lastQuoteIndex: -1 };
+    const result = { hasUnclosedQuote: false, quoteChar: null, lastQuoteIndex: -1 };
     
-    for (const char of quoteChars) {
+    for (let i = 0; i < quoteChars.length; i++) {
+        const char = quoteChars[i];
         const escaped = char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const count = (text.match(new RegExp(escaped, "g")) || []).length;
         if (count % 2 !== 0) {
@@ -102,43 +103,21 @@ function buildContinuationPrompt(currentInput, persona, chatHistory) {
     const settings = getSettings();
     const quoteInfo = detectUnclosedQuote(currentInput);
     
-    let prompt = \`You are continuing a roleplay as the USER character. Write the NEXT sentence only.
-
-USER PERSONA:
-\${persona}
-
-RECENT CONVERSATION:
-\${chatHistory}
-\`;
-
+    let prompt = "You are continuing a roleplay as the USER character. Write the NEXT sentence only.\n\nUSER PERSONA:\n" + persona + "\n\nRECENT CONVERSATION:\n" + chatHistory + "\n";
+    
     if (currentInput && currentInput.trim()) {
-        prompt += \`
-USER'S PARTIAL INPUT:
-"\${currentInput}"
-\`;
+        prompt += "\nUSER'S PARTIAL INPUT:\n\"" + currentInput + "\"\n";
         if (quoteInfo.hasUnclosedQuote) {
-            prompt += \`
-IMPORTANT: Continue the dialogue naturally and close the quote when appropriate.
-\`;
+            prompt += "\nIMPORTANT: Continue the dialogue naturally and close the quote when appropriate.\n";
         } else {
-            prompt += \`
-Continue naturally from this input.
-\`;
+            prompt += "\nContinue naturally from this input.\n";
         }
     } else {
-        prompt += \`
-Continue the roleplay as the user.
-\`;
+        prompt += "\nContinue the roleplay as the user.\n";
     }
-
-    prompt += \`
-OUTPUT RULES:
-- Output ONLY the continuation text
-- Max \${settings.maxChars} characters
-- Dialogue inside quotes
-- Natural, brief continuation
-\`;
-
+    
+    prompt += "\nOUTPUT RULES:\n- Output ONLY the continuation text\n- Max " + settings.maxChars + " characters\n- Dialogue inside quotes\n- Natural, brief continuation\n";
+    
     return prompt;
 }
 
@@ -149,7 +128,7 @@ async function callCustomAPI(prompt) {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "Authorization": \`Bearer \${settings.apiKey}\`
+            "Authorization": "Bearer " + settings.apiKey
         },
         body: JSON.stringify({
             model: settings.apiModel,
@@ -164,16 +143,16 @@ async function callCustomAPI(prompt) {
     
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(\`API error \${response.status}: \${errorText}\`);
+        throw new Error("API error " + response.status + ": " + errorText);
     }
     
     const data = await response.json();
     console.log("[Impersonation] API Response:", data);
     
-    if (data.choices && data.choices[0]?.message?.content) {
+    if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
         return data.choices[0].message.content;
     }
-    if (data.choices && data.choices[0]?.text) {
+    if (data.choices && data.choices[0] && data.choices[0].text) {
         return data.choices[0].text;
     }
     if (data.response) {
@@ -229,9 +208,9 @@ async function generateContinuation() {
 }
 
 function createWandButton() {
-    const button = $(\`<button id="impersonation-wand" title="Generate continuation">🪄</button>\`);
+    const button = $('<button id="impersonation-wand" title="Generate continuation">Wand</button>');
     
-    button.on("click", async (e) => {
+    button.on("click", async function(e) {
         e.preventDefault();
         if (isGenerating) return;
         isGenerating = true;
@@ -270,18 +249,7 @@ function injectSettingsPanel() {
     if ($("#impersonation-settings").length > 0) return;
     
     const settings = getSettings();
-    const html = \`
-<div id="impersonation-settings" class="extension_container">
-    <div class="inline-drawer-wide">
-        <h3>Impersonation Settings</h3>
-        <label><input type="checkbox" id="impersonation-enabled"> Enable</label>
-        <label>API Endpoint:<br><input type="text" id="impersonation-api-endpoint" class="text_pole wide100p"></label>
-        <label>API Key:<br><input type="password" id="impersonation-api-key" class="text_pole wide100p"></label>
-        <label>Model:<br><input type="text" id="impersonation-api-model" class="text_pole wide100p"></label>
-        <label>Max Chars:<br><input type="number" id="impersonation-max-chars" class="text_pole" min="50" max="500"></label>
-    </div>
-</div>
-\`;
+    const html = '<div id="impersonation-settings" class="extension_container"><div class="inline-drawer-wide"><h3>Impersonation Settings</h3><label><input type="checkbox" id="impersonation-enabled"> Enable</label><label>API Endpoint:<br><input type="text" id="impersonation-api-endpoint" class="text_pole wide100p"></label><label>API Key:<br><input type="password" id="impersonation-api-key" class="text_pole wide100p"></label><label>Model:<br><input type="text" id="impersonation-api-model" class="text_pole wide100p"></label><label>Max Chars:<br><input type="number" id="impersonation-max-chars" class="text_pole" min="50" max="500"></label></div></div>';
     
     $("#extensions_settings").append(html);
     
@@ -300,7 +268,7 @@ function injectSettingsPanel() {
     console.log("[Impersonation] Settings panel injected");
 }
 
-jQuery(async () => {
+jQuery(async function() {
     console.log("[Impersonation] Loading extension...");
     await loadSettings();
     injectWandButton();
